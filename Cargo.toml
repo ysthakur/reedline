@@ -13,6 +13,7 @@ version = "0.27.1"
 doctest = true
 
 [dependencies]
+arbitrary = { version = "1", features = ["derive"], optional = true }
 chrono = { version = "0.4.19", default-features = false, features = [
     "clock",
     "serde",

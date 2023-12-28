@@ -769,7 +769,7 @@ impl Reedline {
         }
     }
 
-    fn handle_event(&mut self, prompt: &dyn Prompt, event: ReedlineEvent) -> Result<EventStatus> {
+    pub fn handle_event(&mut self, prompt: &dyn Prompt, event: ReedlineEvent) -> Result<EventStatus> {
         if self.input_mode == InputMode::HistorySearch {
             self.handle_history_search_event(event)
         } else {

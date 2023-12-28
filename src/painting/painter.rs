@@ -91,33 +91,33 @@ impl Painter {
     /// Not to be used for resizes during a running line editor, use
     /// [`Painter::handle_resize()`] instead
     pub(crate) fn initialize_prompt_position(&mut self) -> Result<()> {
-        // Update the terminal size
-        self.terminal_size = {
-            let size = terminal::size()?;
-            // if reported size is 0, 0 -
-            // use a default size to avoid divide by 0 panics
-            if size == (0, 0) {
-                (80, 24)
-            } else {
-                size
-            }
-        };
-        // Cursor positions are 0 based here.
-        let (column, row) = cursor::position()?;
-        // Assumption: if the cursor is not on the zeroth column,
-        // there is content we want to leave intact, thus advance to the next row
-        let new_row = if column > 0 { row + 1 } else { row };
-        //  If we are on the last line and would move beyond the last line due to
-        //  the condition above, we need to make room for the prompt.
-        //  Otherwise printing the prompt would scroll of the stored prompt
-        //  origin, causing issues after repaints.
-        let new_row = if new_row == self.screen_height() {
-            self.print_crlf()?;
-            new_row.saturating_sub(1)
-        } else {
-            new_row
-        };
-        self.prompt_start_row = new_row;
+        // // Update the terminal size
+        // self.terminal_size = {
+        //     let size = terminal::size()?;
+        //     // if reported size is 0, 0 -
+        //     // use a default size to avoid divide by 0 panics
+        //     if size == (0, 0) {
+        //         (80, 24)
+        //     } else {
+        //         size
+        //     }
+        // };
+        // // Cursor positions are 0 based here.
+        // let (column, row) = cursor::position()?;
+        // // Assumption: if the cursor is not on the zeroth column,
+        // // there is content we want to leave intact, thus advance to the next row
+        // let new_row = if column > 0 { row + 1 } else { row };
+        // //  If we are on the last line and would move beyond the last line due to
+        // //  the condition above, we need to make room for the prompt.
+        // //  Otherwise printing the prompt would scroll of the stored prompt
+        // //  origin, causing issues after repaints.
+        // let new_row = if new_row == self.screen_height() {
+        //     self.print_crlf()?;
+        //     new_row.saturating_sub(1)
+        // } else {
+        //     new_row
+        // };
+        self.prompt_start_row = 0;
         Ok(())
     }
 
@@ -139,63 +139,63 @@ impl Painter {
         use_ansi_coloring: bool,
         cursor_config: &Option<CursorConfig>,
     ) -> Result<()> {
-        self.stdout.queue(cursor::Hide)?;
+        // self.stdout.queue(cursor::Hide)?;
 
-        let screen_width = self.screen_width();
-        let screen_height = self.screen_height();
+        // let screen_width = self.screen_width();
+        // let screen_height = self.screen_height();
 
-        // Lines and distance parameters
-        let remaining_lines = self.remaining_lines();
-        let required_lines = lines.required_lines(screen_width, menu);
+        // // Lines and distance parameters
+        // let remaining_lines = self.remaining_lines();
+        // let required_lines = lines.required_lines(screen_width, menu);
 
-        // Marking the painter state as larger buffer to avoid animations
-        self.large_buffer = required_lines >= screen_height;
+        // // Marking the painter state as larger buffer to avoid animations
+        // self.large_buffer = required_lines >= screen_height;
 
-        // This might not be terribly performant. Testing it out
-        let is_reset = || match cursor::position() {
-            Ok(position) => position.1.abs_diff(self.prompt_start_row) > 1,
-            Err(_) => false,
-        };
+        // // This might not be terribly performant. Testing it out
+        // let is_reset = || match cursor::position() {
+        //     Ok(position) => position.1.abs_diff(self.prompt_start_row) > 1,
+        //     Err(_) => false,
+        // };
 
-        // Moving the start position of the cursor based on the size of the required lines
-        if self.large_buffer || is_reset() {
-            self.prompt_start_row = 0;
-        } else if required_lines >= remaining_lines {
-            let extra = required_lines.saturating_sub(remaining_lines);
-            self.queue_universal_scroll(extra)?;
-            self.prompt_start_row = self.prompt_start_row.saturating_sub(extra);
-        }
+        // // Moving the start position of the cursor based on the size of the required lines
+        // if self.large_buffer || is_reset() {
+        //     self.prompt_start_row = 0;
+        // } else if required_lines >= remaining_lines {
+        //     let extra = required_lines.saturating_sub(remaining_lines);
+        //     self.queue_universal_scroll(extra)?;
+        //     self.prompt_start_row = self.prompt_start_row.saturating_sub(extra);
+        // }
 
-        // Moving the cursor to the start of the prompt
-        // from this position everything will be printed
-        self.stdout
-            .queue(cursor::MoveTo(0, self.prompt_start_row))?
-            .queue(Clear(ClearType::FromCursorDown))?;
+        // // Moving the cursor to the start of the prompt
+        // // from this position everything will be printed
+        // self.stdout
+        //     .queue(cursor::MoveTo(0, self.prompt_start_row))?
+        //     .queue(Clear(ClearType::FromCursorDown))?;
 
-        if self.large_buffer {
-            self.print_large_buffer(prompt, lines, menu, use_ansi_coloring)?;
-        } else {
-            self.print_small_buffer(prompt, lines, menu, use_ansi_coloring)?;
-        }
+        // if self.large_buffer {
+        //     self.print_large_buffer(prompt, lines, menu, use_ansi_coloring)?;
+        // } else {
+        //     self.print_small_buffer(prompt, lines, menu, use_ansi_coloring)?;
+        // }
 
-        // The last_required_lines is used to move the cursor at the end where stdout
-        // can print without overwriting the things written during the painting
-        self.last_required_lines = required_lines;
+        // // The last_required_lines is used to move the cursor at the end where stdout
+        // // can print without overwriting the things written during the painting
+        // self.last_required_lines = required_lines;
 
-        self.stdout.queue(RestorePosition)?;
+        // self.stdout.queue(RestorePosition)?;
 
-        if let Some(shapes) = cursor_config {
-            let shape = match &prompt_mode {
-                PromptEditMode::Emacs => shapes.emacs,
-                PromptEditMode::Vi(PromptViMode::Insert) => shapes.vi_insert,
-                PromptEditMode::Vi(PromptViMode::Normal) => shapes.vi_normal,
-                _ => None,
-            };
-            if let Some(shape) = shape {
-                self.stdout.queue(shape)?;
-            }
-        }
-        self.stdout.queue(cursor::Show)?;
+        // if let Some(shapes) = cursor_config {
+        //     let shape = match &prompt_mode {
+        //         PromptEditMode::Emacs => shapes.emacs,
+        //         PromptEditMode::Vi(PromptViMode::Insert) => shapes.vi_insert,
+        //         PromptEditMode::Vi(PromptViMode::Normal) => shapes.vi_normal,
+        //         _ => None,
+        //     };
+        //     if let Some(shape) = shape {
+        //         self.stdout.queue(shape)?;
+        //     }
+        // }
+        // self.stdout.queue(cursor::Show)?;
 
         self.stdout.flush()
     }
@@ -443,15 +443,15 @@ impl Painter {
     /// Clear the screen by printing enough whitespace to start the prompt or
     /// other output back at the first line of the terminal.
     pub(crate) fn clear_screen(&mut self) -> Result<()> {
-        self.stdout.queue(cursor::Hide)?;
-        let (_, num_lines) = terminal::size()?;
-        for _ in 0..2 * num_lines {
-            self.stdout.queue(Print("\n"))?;
-        }
-        self.stdout.queue(MoveTo(0, 0))?;
-        self.stdout.queue(cursor::Show)?;
+        // self.stdout.queue(cursor::Hide)?;
+        // let (_, num_lines) = terminal::size()?;
+        // for _ in 0..2 * num_lines {
+        //     self.stdout.queue(Print("\n"))?;
+        // }
+        // self.stdout.queue(MoveTo(0, 0))?;
+        // self.stdout.queue(cursor::Show)?;
 
-        self.stdout.flush()?;
+        // self.stdout.flush()?;
         self.initialize_prompt_position()
     }
 

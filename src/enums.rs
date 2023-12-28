@@ -18,6 +18,7 @@ pub enum Signal {
 ///
 /// Executed by `Reedline::run_edit_commands()`
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, EnumIter)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum EditCommand {
     /// Move to the start of the buffer
     MoveToStart,
@@ -389,6 +390,8 @@ impl UndoBehavior {
 
 /// Reedline supported actions.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, EnumIter)]
+
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum ReedlineEvent {
     /// No op event
     None,
@@ -556,7 +559,7 @@ impl Display for ReedlineEvent {
     }
 }
 
-pub(crate) enum EventStatus {
+pub enum EventStatus {
     Handled,
     Inapplicable,
     Exits(Signal),
