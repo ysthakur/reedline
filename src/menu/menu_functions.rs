@@ -611,6 +611,7 @@ mod tests {
                 extra: None,
                 span: Span::new(0, s.len()),
                 append_whitespace: false,
+                match_indices: None,
             })
             .collect();
         let res = find_common_string(&input);
@@ -631,6 +632,7 @@ mod tests {
                 extra: None,
                 span: Span::new(0, s.len()),
                 append_whitespace: false,
+                match_indices: None,
             })
             .collect();
         let res = find_common_string(&input);
@@ -686,6 +688,7 @@ mod tests {
                 extra: None,
                 span: Span::new(start, end),
                 append_whitespace: false,
+                match_indices: None,
             }),
             &mut editor,
         );

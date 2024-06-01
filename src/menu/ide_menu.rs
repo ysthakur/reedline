@@ -1382,6 +1382,7 @@ mod tests {
             extra: None,
             span: Span { start: 0, end: pos },
             append_whitespace: false,
+            match_indices: None,
         }
     }
 

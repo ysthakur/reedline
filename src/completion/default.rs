@@ -110,6 +110,7 @@ impl Completer for DefaultCompleter {
                                         extra: None,
                                         span,
                                         append_whitespace: false,
+                                        match_indices: None,
                                     }
                                 })
                                 .filter(|t| t.value.len() > (t.span.end - t.span.start))
@@ -384,6 +385,7 @@ mod tests {
                     extra: None,
                     span: Span { start: 0, end: 3 },
                     append_whitespace: false,
+                    match_indices: None,
                 },
                 Suggestion {
                     value: "ｎｕｍｂｅｒ".into(),
@@ -392,6 +394,7 @@ mod tests {
                     extra: None,
                     span: Span { start: 0, end: 3 },
                     append_whitespace: false,
+                    match_indices: None,
                 },
                 Suggestion {
                     value: "ｎｕｓｈｅｌｌ".into(),
@@ -400,6 +403,7 @@ mod tests {
                     extra: None,
                     span: Span { start: 0, end: 3 },
                     append_whitespace: false,
+                    match_indices: None,
                 },
             ]
         );
@@ -428,6 +432,7 @@ mod tests {
                     extra: None,
                     span: Span { start: 8, end: 9 },
                     append_whitespace: false,
+                    match_indices: None,
                 },
                 Suggestion {
                     value: "this is the reedline crate".into(),
@@ -436,6 +441,7 @@ mod tests {
                     extra: None,
                     span: Span { start: 8, end: 9 },
                     append_whitespace: false,
+                    match_indices: None,
                 },
                 Suggestion {
                     value: "this is the reedline crate".into(),
@@ -444,6 +450,7 @@ mod tests {
                     extra: None,
                     span: Span { start: 0, end: 9 },
                     append_whitespace: false,
+                    match_indices: None,
                 },
             ]
         );
