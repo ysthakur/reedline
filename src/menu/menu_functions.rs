@@ -1,4 +1,6 @@
 //! Collection of common functions that can be used to create menus
+use nu_ansi_term::{AnsiStrings, Style};
+
 use crate::{Editor, Suggestion, UndoBehavior};
 
 /// Index result obtained from parsing a string with an index marker
@@ -351,6 +353,36 @@ pub fn can_partially_complete(values: &[Suggestion], editor: &mut Editor) -> boo
     } else {
         false
     }
+}
+
+/// Style a suggestion to be shown in a completer menu
+pub fn style_suggestion(
+    suggestion: &str,
+    match_indices: &[usize],
+    match_style: &Style,
+    text_style: &Style,
+) -> String {
+    let mut parts = Vec::new();
+    let mut prev_styled = false;
+    let mut start = 0;
+    for i in 0..suggestion.len() {
+        if match_indices.contains(&i) {
+            if !prev_styled {
+                parts.push(text_style.paint(&suggestion[start..i]));
+                start = i;
+                prev_styled = true;
+            }
+        } else if prev_styled {
+            parts.push(match_style.paint(&suggestion[start..i]));
+            start = i;
+            prev_styled = false;
+        }
+    }
+
+    let last_style = if prev_styled { match_style } else { text_style };
+    parts.push(last_style.paint(&suggestion[start..]));
+
+    AnsiStrings(&parts).to_string()
 }
 
 #[cfg(test)]
