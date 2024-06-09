@@ -731,4 +731,15 @@ mod tests {
         assert_eq!(orig_buffer, editor.get_buffer());
         assert_eq!(orig_insertion_point, editor.insertion_point());
     }
+
+    #[test]
+    fn style_fuzzy_suggestion() {
+        let match_style = Style::new().italic();
+        let text_style = Style::new().dimmed();
+
+        assert_eq!(
+            "\u{1b}[2m\u{1b}[0m\u{1b}[3mab\u{1b}[0m\u{1b}[2mcd\u{1b}[0m\u{1b}[3me\u{1b}[0m\u{1b}[2mfg\u{1b}[0m",
+            style_suggestion("abcdefg", &[0, 1, 4], &match_style, &text_style)
+        );
+    }
 }
