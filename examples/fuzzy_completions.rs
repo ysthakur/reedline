@@ -1,5 +1,8 @@
 // Modifies the completions example to demonstrate highlighting of fuzzy completions
 // cargo run --example fuzzy_completions
+//
+// One of the suggestions is "multiple 汉 by̆tes字👩🏾". Try typing in "y" or "👩" and note how
+// the entire grapheme "y̆" or "👩🏾" is highlighted (might not look right in your terminal).
 
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, Completer, DefaultPrompt, EditCommand, Emacs, KeyCode,
@@ -16,15 +19,15 @@ impl Completer for HomegrownFuzzyCompleter {
         self.0
             .iter()
             .filter_map(|command_str| {
-                let command = command_str.chars().collect::<Vec<_>>();
+                let command = command_str.as_bytes();
                 let mut start = 0;
                 let mut match_indices = Vec::new();
-                for l in line.chars() {
+                for l in line.as_bytes() {
                     if start == command.len() {
                         break;
                     }
                     let mut i = start;
-                    while i < command.len() && l != command[i] {
+                    while i < command.len() && *l != command[i] {
                         i += 1;
                     }
                     if i < command.len() {
@@ -95,6 +98,7 @@ fn main() -> io::Result<()> {
         "ababac".into(),
         "abacaxyc".into(),
         "abadarabc".into(),
+        "multiple 汉 by̆tes字👩🏾".into(),
     ];
 
     let completer = Box::new(HomegrownFuzzyCompleter(commands));

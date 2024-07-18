@@ -1,5 +1,6 @@
 //! Collection of common functions that can be used to create menus
 use nu_ansi_term::{AnsiStrings, Style};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{Editor, Suggestion, UndoBehavior};
 
@@ -356,6 +357,8 @@ pub fn can_partially_complete(values: &[Suggestion], editor: &mut Editor) -> boo
 }
 
 /// Style a suggestion to be shown in a completer menu
+///
+/// * `match_indices` - Indices of bytes that matched the typed text
 pub fn style_suggestion(
     suggestion: &str,
     match_indices: &[usize],
@@ -364,23 +367,27 @@ pub fn style_suggestion(
 ) -> String {
     let mut parts = Vec::new();
     let mut prev_styled = false;
-    let mut start = 0;
-    for i in 0..suggestion.len() {
-        if match_indices.contains(&i) {
-            if !prev_styled {
-                parts.push(text_style.paint(&suggestion[start..i]));
-                start = i;
-                prev_styled = true;
+    let mut part_start = 0;
+    for (grapheme_start, grapheme) in suggestion.grapheme_indices(true) {
+        let is_match =
+            (grapheme_start..(grapheme_start + grapheme.len())).any(|i| match_indices.contains(&i));
+        if is_match && !prev_styled {
+            if part_start < grapheme_start {
+                parts.push(text_style.paint(&suggestion[part_start..grapheme_start]));
             }
-        } else if prev_styled {
-            parts.push(match_style.paint(&suggestion[start..i]));
-            start = i;
+            part_start = grapheme_start;
+            prev_styled = true;
+        } else if !is_match && prev_styled {
+            if part_start < grapheme_start {
+                parts.push(match_style.paint(&suggestion[part_start..grapheme_start]));
+            }
+            part_start = grapheme_start;
             prev_styled = false;
         }
     }
 
     let last_style = if prev_styled { match_style } else { text_style };
-    parts.push(last_style.paint(&suggestion[start..]));
+    parts.push(last_style.paint(&suggestion[part_start..]));
 
     AnsiStrings(&parts).to_string()
 }
@@ -737,9 +744,23 @@ mod tests {
         let match_style = Style::new().italic();
         let text_style = Style::new().dimmed();
 
+        let expected = AnsiStrings(&[
+            match_style.paint("ab"),
+            text_style.paint("c"),
+            match_style.paint("汉"),
+            text_style.paint("d"),
+            match_style.paint("y̆"),
+            text_style.paint("e"),
+        ])
+        .to_string();
+        let match_indices = &[
+            0, 1, // ab
+            5, // the last (third) byte of 汉
+            7, // the first byte of y̆
+        ];
         assert_eq!(
-            "\u{1b}[2m\u{1b}[0m\u{1b}[3mab\u{1b}[0m\u{1b}[2mcd\u{1b}[0m\u{1b}[3me\u{1b}[0m\u{1b}[2mfg\u{1b}[0m",
-            style_suggestion("abcdefg", &[0, 1, 4], &match_style, &text_style)
+            expected,
+            style_suggestion("abc汉dy̆e", match_indices, &match_style, &text_style)
         );
     }
 }
