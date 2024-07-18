@@ -8,6 +8,7 @@ use crate::{
     Completer, Suggestion,
 };
 use nu_ansi_term::ansi::RESET;
+use unicode_width::UnicodeWidthStr;
 
 /// Default values used as reference for the menu. These values are set during
 /// the initial declaration of the menu and are always kept as reference for the
