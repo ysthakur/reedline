@@ -61,10 +61,10 @@ impl<'menu> HistoryCompleter<'menu> {
         Suggestion {
             value: value.to_string(),
             description: None,
-            style: None,
             extra: None,
             span,
             append_whitespace: false,
+            ..Default::default()
         }
     }
 }

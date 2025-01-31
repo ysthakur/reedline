@@ -1,5 +1,10 @@
 //! Collection of common functions that can be used to create menus
+use nu_ansi_term::{ansi::RESET, Style};
+use unicode_width::UnicodeWidthStr;
+
 use crate::{Editor, Suggestion, UndoBehavior};
+
+use super::MenuTextStyle;
 
 /// Index result obtained from parsing a string with an index marker
 /// For example, the next string:
@@ -354,6 +359,127 @@ pub fn can_partially_complete(values: &[Suggestion], editor: &mut Editor) -> boo
     }
 }
 
+/// Get the width of a suggestion's display text
+pub fn suggestion_width(suggestion: &Suggestion) -> usize {
+    if let Some(parts) = &suggestion.display_text {
+        parts.iter().map(|(_, part)| part.width()).sum()
+    } else {
+        suggestion.value.width()
+    }
+}
+
+/// Create text to display for a suggestion
+/// TODO tests, possibly split into 2 functions rather than taking use_ansi_coloring
+/// truncation + ellipses could also be moved to a separate function
+pub fn create_display_text(
+    suggestion: &Suggestion,
+    color: &MenuTextStyle,
+    selected: bool,
+    match_len: usize,
+    use_ansi_coloring: bool,
+    max_width: usize,
+) -> (String, usize) {
+    let max_width_trimmed = max_width.saturating_sub(3);
+    let width = suggestion_width(suggestion);
+
+    if use_ansi_coloring {
+        let (match_style, text_style) = if selected {
+            (color.selected_match_style, color.selected_text_style)
+        } else {
+            (color.match_style, color.text_style)
+        };
+        if let Some(parts) = &suggestion.display_text {
+            // We can't use nu_ansi_term::util::sub_string here because it directly
+            // slices strings rather than working on Unicode characters
+            let mut res = String::new();
+            // Only applicable if suggestion is longer than max width
+            let mut left = max_width_trimmed;
+            for (mut style, part) in parts {
+                // TODO check for Color::Default?
+                if style.foreground.is_none() {
+                    style.foreground = text_style.foreground;
+                }
+                if style.background.is_none() {
+                    style.background = text_style.background;
+                }
+
+                if width <= max_width {
+                    res.push_str(&style.paint(part).to_string())
+                } else {
+                    let part_width = part.width();
+                    if part_width <= left {
+                        res.push_str(&style.paint(part).to_string());
+                        left -= part_width;
+                    } else {
+                        let mut part: String = part.chars().take(left).collect();
+                        part.push_str("...");
+                        res.push_str(&style.paint(part).to_string());
+                        break;
+                    }
+                }
+            }
+            if width <= max_width {
+                (res, width)
+            } else {
+                (res, max_width)
+            }
+        } else {
+            let value = if width <= max_width {
+                suggestion.value.to_string()
+            } else {
+                let mut str: String = suggestion.value.chars().take(max_width_trimmed).collect();
+                str.push_str("...");
+                str
+            };
+            let match_str: String = value.chars().take(match_len).collect();
+            let remaining_str = &value[match_str.len()..];
+
+            let suggestion_style_prefix = suggestion.style.unwrap_or(color.text_style).prefix();
+            let remaining_style = if selected {
+                color.selected_text_style
+            } else {
+                Style::default()
+            };
+
+            let res = format!(
+                "{}{}{}{}{}{}{}{}",
+                suggestion_style_prefix,
+                match_style.prefix(),
+                match_str,
+                RESET,
+                suggestion_style_prefix,
+                remaining_style.prefix(),
+                remaining_str,
+                RESET,
+            );
+            if width <= max_width {
+                (res, width)
+            } else {
+                (res, max_width)
+            }
+        }
+    } else {
+        let text = suggestion
+            .display_text
+            .as_ref()
+            .map(|parts| {
+                parts
+                    .iter()
+                    .map(|(_, part)| part.as_str())
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .unwrap_or(suggestion.value.to_string());
+        if width <= max_width {
+            (text, width)
+        } else {
+            let mut chars = text.chars().take(max_width_trimmed).collect::<String>();
+            chars.push_str("...");
+            (chars, max_width)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -608,10 +734,10 @@ mod tests {
             .map(|s| Suggestion {
                 value: s.into(),
                 description: None,
-                style: None,
                 extra: None,
                 span: Span::new(0, s.len()),
                 append_whitespace: false,
+                ..Default::default()
             })
             .collect();
         let res = find_common_string(&input);
@@ -628,10 +754,10 @@ mod tests {
             .map(|s| Suggestion {
                 value: s.into(),
                 description: None,
-                style: None,
                 extra: None,
                 span: Span::new(0, s.len()),
                 append_whitespace: false,
+                ..Default::default()
             })
             .collect();
         let res = find_common_string(&input);
@@ -683,10 +809,10 @@ mod tests {
             Some(Suggestion {
                 value,
                 description: None,
-                style: None,
                 extra: None,
                 span: Span::new(start, end),
                 append_whitespace: false,
+                ..Default::default()
             }),
             &mut editor,
         );

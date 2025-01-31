@@ -1,5 +1,5 @@
 use {
-    super::MenuSettings,
+    super::{menu_functions::{create_display_text, suggestion_width}, MenuSettings},
     crate::{
         menu_functions::{completer_input, replace_in_buffer},
         Completer, Editor, Menu, MenuBuilder, MenuEvent, Painter, Suggestion,
@@ -281,26 +281,32 @@ impl DescriptionMenu {
         suggestion: &Suggestion,
         index: usize,
         column: u16,
-        empty_space: usize,
         use_ansi_coloring: bool,
     ) -> String {
+        let (display_text, len) = create_display_text(
+            suggestion,
+            &self.settings.color,
+            index == self.index(),
+            0, // TODO
+            use_ansi_coloring,
+            self.get_width(),
+        );
+
+        let empty_space = self.get_width().saturating_sub(len);
+
         if use_ansi_coloring {
             if index == self.index() {
                 format!(
-                    "{}{}{}{:>empty$}{}",
-                    self.settings.color.selected_text_style.prefix(),
-                    &suggestion.value,
-                    RESET,
+                    "{}{:>empty$}{}",
+                    display_text,
                     "",
                     self.end_of_line(column, index),
                     empty = empty_space,
                 )
             } else {
                 format!(
-                    "{}{}{}{:>empty$}{}",
-                    self.settings.color.text_style.prefix(),
-                    &suggestion.value,
-                    RESET,
+                    "{}{:>empty$}{}",
+                    display_text,
                     "",
                     self.end_of_line(column, index),
                     empty = empty_space,
@@ -318,7 +324,7 @@ impl DescriptionMenu {
             let line = format!(
                 "{}{}{:>empty$}{}",
                 marker,
-                &suggestion.value,
+                display_text,
                 "",
                 self.end_of_line(column, index),
                 empty = empty_space,
@@ -529,14 +535,12 @@ impl Menu for DescriptionMenu {
                 MenuEvent::PreviousPage | MenuEvent::NextPage => {}
             }
 
-            let max_width = self.get_values().iter().fold(0, |acc, suggestion| {
-                let str_len = suggestion.value.len() + self.default_details.col_padding;
-                if str_len > acc {
-                    str_len
-                } else {
-                    acc
-                }
-            });
+            let max_width = self
+                .get_values()
+                .iter()
+                .map(|suggestion| suggestion_width(suggestion) + self.default_details.col_padding)
+                .max()
+                .unwrap_or(0);
 
             // If no default width is found, then the total screen width is used to estimate
             // the column width based on the default number of columns
@@ -643,13 +647,11 @@ impl Menu for DescriptionMenu {
                     // Correcting the enumerate index based on the number of skipped values
                     let index = index + skip_values;
                     let column = index as u16 % self.get_cols();
-                    let empty_space = self.get_width().saturating_sub(suggestion.value.len());
 
                     self.create_entry_string(
                         suggestion,
                         index,
                         column,
-                        empty_space,
                         use_ansi_coloring,
                     )
                 })

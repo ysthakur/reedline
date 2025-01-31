@@ -1,4 +1,7 @@
-use super::{Menu, MenuBuilder, MenuEvent, MenuSettings};
+use super::{
+    menu_functions::{create_display_text, suggestion_width},
+    Menu, MenuBuilder, MenuEvent, MenuSettings,
+};
 use crate::{
     core_editor::Editor,
     menu_functions::{can_partially_complete, completer_input, replace_in_buffer},
@@ -493,71 +496,30 @@ impl IdeMenu {
             .map(|border| border.vertical)
             .unwrap_or_default();
 
-        let padding_right = (self.working_details.completion_width as usize)
-            .saturating_sub(suggestion.value.chars().count() + border_width + padding);
-
         let max_string_width =
             (self.working_details.completion_width as usize).saturating_sub(border_width + padding);
 
-        let string = if suggestion.value.chars().count() > max_string_width {
-            let mut chars = suggestion
-                .value
-                .chars()
-                .take(max_string_width.saturating_sub(3))
-                .collect::<String>();
-            chars.push_str("...");
-            chars
-        } else {
-            suggestion.value.clone()
-        };
+        let (display_text, len) = create_display_text(
+            suggestion,
+            &self.settings.color,
+            index == self.index(),
+            self.working_details.shortest_base_string.len(),
+            use_ansi_coloring,
+            max_string_width,
+        );
+
+        let padding_right = (self.working_details.completion_width as usize)
+            .saturating_sub(len + border_width + padding);
 
         if use_ansi_coloring {
-            let match_len = self
-                .working_details
-                .shortest_base_string
-                .len()
-                .min(string.len());
-
-            // Split string so the match text can be styled
-            let (match_str, remaining_str) = string.split_at(match_len);
-
-            let suggestion_style_prefix = suggestion
-                .style
-                .unwrap_or(self.settings.color.text_style)
-                .prefix();
-
-            if index == self.index() {
-                format!(
-                    "{}{}{}{}{}{}{}{}{}{}{}{}",
-                    vertical_border,
-                    suggestion_style_prefix,
-                    " ".repeat(padding),
-                    self.settings.color.selected_match_style.prefix(),
-                    match_str,
-                    RESET,
-                    suggestion_style_prefix,
-                    self.settings.color.selected_text_style.prefix(),
-                    remaining_str,
-                    " ".repeat(padding_right),
-                    RESET,
-                    vertical_border,
-                )
-            } else {
-                format!(
-                    "{}{}{}{}{}{}{}{}{}{}{}",
-                    vertical_border,
-                    suggestion_style_prefix,
-                    " ".repeat(padding),
-                    self.settings.color.match_style.prefix(),
-                    match_str,
-                    RESET,
-                    suggestion_style_prefix,
-                    remaining_str,
-                    " ".repeat(padding_right),
-                    RESET,
-                    vertical_border,
-                )
-            }
+            format!(
+                "{}{}{}{}{}",
+                vertical_border,
+                " ".repeat(padding),
+                display_text,
+                " ".repeat(padding_right),
+                vertical_border,
+            )
         } else {
             let marker = if index == self.index() { ">" } else { "" };
 
@@ -566,7 +528,7 @@ impl IdeMenu {
                 vertical_border,
                 " ".repeat(padding),
                 marker,
-                string,
+                display_text,
                 " ".repeat(padding_right),
                 vertical_border,
             )
@@ -687,13 +649,12 @@ impl Menu for IdeMenu {
                 | MenuEvent::NextPage => {}
             }
 
-            self.longest_suggestion = self.get_values().iter().fold(0, |prev, suggestion| {
-                if prev >= suggestion.value.len() {
-                    prev
-                } else {
-                    suggestion.value.len()
-                }
-            });
+            self.longest_suggestion = self
+                .get_values()
+                .iter()
+                .map(suggestion_width)
+                .max()
+                .unwrap_or(0);
 
             let terminal_width = painter.screen_width();
             let mut cursor_pos = self.working_details.cursor_col;
@@ -1378,10 +1339,10 @@ mod tests {
         Suggestion {
             value: name.to_string(),
             description: None,
-            style: None,
             extra: None,
             span: Span { start: 0, end: pos },
             append_whitespace: false,
+            ..Default::default()
         }
     }
 

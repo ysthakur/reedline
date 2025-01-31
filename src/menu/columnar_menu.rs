@@ -1,4 +1,7 @@
-use super::{Menu, MenuBuilder, MenuEvent, MenuSettings};
+use super::{
+    menu_functions::{create_display_text, suggestion_width},
+    Menu, MenuBuilder, MenuEvent, MenuSettings,
+};
 use crate::{
     core_editor::Editor,
     menu_functions::{can_partially_complete, completer_input, replace_in_buffer},
@@ -295,74 +298,38 @@ impl ColumnarMenu {
         suggestion: &Suggestion,
         index: usize,
         column: u16,
-        empty_space: usize,
         use_ansi_coloring: bool,
     ) -> String {
+        let left_text_size = if self.longest_suggestion == 0 {
+            self.get_width()
+        } else {
+            self.longest_suggestion + self.default_details.col_padding
+        };
+        let right_text_size = self.get_width().saturating_sub(left_text_size);
+
+        let (display_text, len) = create_display_text(
+            suggestion,
+            &self.settings.color,
+            index == self.index(),
+            self.working_details.shortest_base_string.len(),
+            use_ansi_coloring,
+            left_text_size,
+        );
+
+        let padding = left_text_size - len;
+
         if use_ansi_coloring {
-            let match_len = self.working_details.shortest_base_string.len();
-
-            // Split string so the match text can be styled
-            let (match_str, remaining_str) = suggestion.value.split_at(match_len);
-
-            let suggestion_style_prefix = suggestion
-                .style
-                .unwrap_or(self.settings.color.text_style)
-                .prefix();
-
-            let left_text_size = self.longest_suggestion + self.default_details.col_padding;
-            let right_text_size = self.get_width().saturating_sub(left_text_size);
-
-            let max_remaining = left_text_size.saturating_sub(match_str.width());
-            let max_match = max_remaining.saturating_sub(remaining_str.width());
-
-            if index == self.index() {
-                if let Some(description) = &suggestion.description {
-                    format!(
-                        "{}{}{}{}{}{:max_match$}{:max_remaining$}{}{}{}{}{}{}",
-                        suggestion_style_prefix,
-                        self.settings.color.selected_match_style.prefix(),
-                        match_str,
-                        RESET,
-                        suggestion_style_prefix,
-                        self.settings.color.selected_text_style.prefix(),
-                        &remaining_str,
-                        RESET,
-                        self.settings.color.description_style.prefix(),
-                        self.settings.color.selected_text_style.prefix(),
-                        description
-                            .chars()
-                            .take(right_text_size)
-                            .collect::<String>()
-                            .replace('\n', " "),
-                        RESET,
-                        self.end_of_line(column),
-                    )
-                } else {
-                    format!(
-                        "{}{}{}{}{}{}{}{}{:>empty$}{}",
-                        suggestion_style_prefix,
-                        self.settings.color.selected_match_style.prefix(),
-                        match_str,
-                        RESET,
-                        suggestion_style_prefix,
-                        self.settings.color.selected_text_style.prefix(),
-                        remaining_str,
-                        RESET,
-                        "",
-                        self.end_of_line(column),
-                        empty = empty_space,
-                    )
-                }
-            } else if let Some(description) = &suggestion.description {
+            let desc_text_style = if index == self.index() {
+                self.settings.color.selected_text_style
+            } else {
+                self.settings.color.text_style
+            };
+            if let Some(description) = &suggestion.description {
                 format!(
-                    "{}{}{}{}{:max_match$}{:max_remaining$}{}{}{}{}{}",
-                    suggestion_style_prefix,
-                    self.settings.color.match_style.prefix(),
-                    match_str,
-                    RESET,
-                    suggestion_style_prefix,
-                    remaining_str,
-                    RESET,
+                    "{}{}{}{}{}{}{}",
+                    display_text,
+                    " ".repeat(padding),
+                    desc_text_style.prefix(),
                     self.settings.color.description_style.prefix(),
                     description
                         .chars()
@@ -374,19 +341,11 @@ impl ColumnarMenu {
                 )
             } else {
                 format!(
-                    "{}{}{}{}{}{}{}{}{:>empty$}{}{}",
-                    suggestion_style_prefix,
-                    self.settings.color.match_style.prefix(),
-                    match_str,
-                    RESET,
-                    suggestion_style_prefix,
-                    remaining_str,
-                    RESET,
-                    self.settings.color.description_style.prefix(),
+                    "{}{:>empty$}{}",
+                    display_text,
                     "",
-                    RESET,
                     self.end_of_line(column),
-                    empty = empty_space,
+                    empty = padding,
                 )
             }
         } else {
@@ -395,29 +354,25 @@ impl ColumnarMenu {
 
             let line = if let Some(description) = &suggestion.description {
                 format!(
-                    "{}{:max$}{}{}",
+                    "{}{}{}{}{}",
                     marker,
-                    &suggestion.value,
+                    display_text,
+                    " ".repeat(padding.saturating_sub(marker.width())),
                     description
                         .chars()
-                        .take(empty_space)
+                        .take(right_text_size)
                         .collect::<String>()
                         .replace('\n', " "),
                     self.end_of_line(column),
-                    max = self.longest_suggestion
-                        + self
-                            .default_details
-                            .col_padding
-                            .saturating_sub(marker.width()),
                 )
             } else {
                 format!(
                     "{}{}{:>empty$}{}",
                     marker,
-                    &suggestion.value,
+                    display_text,
                     "",
                     self.end_of_line(column),
-                    empty = empty_space.saturating_sub(marker.width()),
+                    empty = padding.saturating_sub(marker.width()),
                 )
             };
 
@@ -563,22 +518,21 @@ impl Menu for ColumnarMenu {
                 self.working_details.columns = 1;
                 self.working_details.col_width = painter.screen_width() as usize;
 
-                self.longest_suggestion = self.get_values().iter().fold(0, |prev, suggestion| {
-                    if prev >= suggestion.value.width() {
-                        prev
-                    } else {
-                        suggestion.value.width()
-                    }
-                });
+                self.longest_suggestion = self
+                    .get_values()
+                    .iter()
+                    .map(suggestion_width)
+                    .max()
+                    .unwrap_or(0);
             } else {
-                let max_width = self.get_values().iter().fold(0, |acc, suggestion| {
-                    let str_len = suggestion.value.width() + self.default_details.col_padding;
-                    if str_len > acc {
-                        str_len
-                    } else {
-                        acc
-                    }
-                });
+                let max_width = self
+                    .get_values()
+                    .iter()
+                    .map(|suggestion| {
+                        suggestion_width(suggestion) + self.default_details.col_padding
+                    })
+                    .max()
+                    .unwrap_or(0);
 
                 // If no default width is found, then the total screen width is used to estimate
                 // the column width based on the default number of columns
@@ -654,9 +608,8 @@ impl Menu for ColumnarMenu {
                     // Correcting the enumerate index based on the number of skipped values
                     let index = index + skip_values;
                     let column = index as u16 % self.get_cols();
-                    let empty_space = self.get_width().saturating_sub(suggestion.value.width());
 
-                    self.create_string(suggestion, index, column, empty_space, use_ansi_coloring)
+                    self.create_string(suggestion, index, column, use_ansi_coloring)
                 })
                 .collect()
         }
@@ -746,10 +699,10 @@ mod tests {
         Suggestion {
             value: name.to_string(),
             description: None,
-            style: None,
             extra: None,
             span: Span { start: 0, end: pos },
             append_whitespace: false,
+            ..Default::default()
         }
     }
 
