@@ -91,5 +91,5 @@ pub struct Suggestion {
     /// This helps to avoid that a completer repeats the complete suggestion.
     pub append_whitespace: bool,
     /// Text to display, along with a style for each part of it
-    pub display_text: Option<Vec<(Style, String)>>,
+    pub display_text: Option<Vec<(Style, String, bool)>>,
 }

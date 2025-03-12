@@ -362,7 +362,7 @@ pub fn can_partially_complete(values: &[Suggestion], editor: &mut Editor) -> boo
 /// Get the width of a suggestion's display text
 pub fn suggestion_width(suggestion: &Suggestion) -> usize {
     if let Some(parts) = &suggestion.display_text {
-        parts.iter().map(|(_, part)| part.width()).sum()
+        parts.iter().map(|(_, part, _)| part.width()).sum()
     } else {
         suggestion.value.width()
     }
@@ -394,17 +394,10 @@ pub fn create_display_text(
             let mut res = String::new();
             // Only applicable if suggestion is longer than max width
             let mut left = max_width_trimmed;
-            for (mut style, part) in parts {
-                // TODO check for Color::Default?
-                if style.foreground.is_none() {
-                    style.foreground = text_style.foreground;
-                }
-                if style.background.is_none() {
-                    style.background = text_style.background;
-                }
-
+            for (style, part, is_match) in parts {
+                let default_style = if *is_match { match_style } else { text_style };
                 if width <= max_width {
-                    res.push_str(&style.paint(part).to_string())
+                    res.push_str(&format!("{}{}", default_style.prefix(), style.paint(part)))
                 } else {
                     let part_width = part.width();
                     if part_width <= left {
@@ -413,7 +406,7 @@ pub fn create_display_text(
                     } else {
                         let mut part: String = part.chars().take(left).collect();
                         part.push_str("...");
-                        res.push_str(&style.paint(part).to_string());
+                        res.push_str(&format!("{}{}", default_style.prefix(), style.paint(part)));
                         break;
                     }
                 }
@@ -465,7 +458,7 @@ pub fn create_display_text(
             .map(|parts| {
                 parts
                     .iter()
-                    .map(|(_, part)| part.as_str())
+                    .map(|(_, part, _)| part.as_str())
                     .collect::<Vec<_>>()
                     .join("")
             })
@@ -478,6 +471,51 @@ pub fn create_display_text(
             (chars, max_width)
         }
     }
+}
+
+pub fn indices_to_parts(str: &str, match_indices: &[usize]) -> Vec<(Style, String, bool)> {
+    if match_indices.is_empty() {
+        return vec![(Style::default(), str.to_string(), false)];
+    }
+
+    let mut match_indices = match_indices.to_vec();
+    match_indices.sort();
+
+    let mut parts = Vec::new();
+
+    if match_indices[0] > 0 {
+        parts.push((
+            Style::default(),
+            str[0..match_indices[0]].to_string(),
+            false,
+        ));
+    }
+
+    let mut curr = String::new();
+    let mut in_match = false;
+    let mut i = 0;
+    for (ind, c) in str.char_indices() {
+        if i < match_indices.len() && ind == match_indices[i] {
+            if in_match {
+                curr.push(c);
+            } else {
+                parts.push((Style::default(), curr, false));
+                curr = String::new();
+                in_match = true;
+            }
+            i += 1;
+        } else {
+            if !in_match {
+                curr.push(c);
+            } else {
+                parts.push((Style::default(), curr, true));
+                curr = String::new();
+                in_match = false;
+            }
+        }
+    }
+
+    parts
 }
 
 #[cfg(test)]
