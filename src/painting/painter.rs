@@ -94,6 +94,7 @@ pub struct Painter {
     terminal_size: (u16, u16),
     last_required_lines: u16,
     large_buffer: bool,
+    just_resized: bool,
     after_cursor_lines: Option<String>,
 }
 
@@ -105,6 +106,7 @@ impl Painter {
             terminal_size: (0, 0),
             last_required_lines: 0,
             large_buffer: false,
+            just_resized: false,
             after_cursor_lines: None,
         }
     }
@@ -196,6 +198,15 @@ impl Painter {
 
         let screen_width = self.screen_width();
         let screen_height = self.screen_height();
+
+        // Handle resize for multi line prompt
+        if self.just_resized {
+            self.prompt_start_row = self.prompt_start_row.saturating_sub(
+                (lines.prompt_str_left.matches('\n').count()
+                    + lines.prompt_indicator.matches('\n').count()) as u16,
+            );
+            self.just_resized = false;
+        }
 
         // Lines and distance parameters
         let remaining_lines = self.remaining_lines();
@@ -488,6 +499,7 @@ impl Painter {
         // out yet.
         if let Ok(position) = cursor::position() {
             self.prompt_start_row = position.1;
+            self.just_resized = true;
         }
     }
 
@@ -510,23 +522,18 @@ impl Painter {
     /// Clear the screen by printing enough whitespace to start the prompt or
     /// other output back at the first line of the terminal.
     pub(crate) fn clear_screen(&mut self) -> Result<()> {
-        self.stdout.queue(cursor::Hide)?;
-        let (_, num_lines) = terminal::size()?;
-        for _ in 0..2 * num_lines {
-            self.stdout.queue(Print("\n"))?;
-        }
-        self.stdout.queue(MoveTo(0, 0))?;
-        self.stdout.queue(cursor::Show)?;
-
-        self.stdout.flush()?;
+        self.stdout
+            .queue(Clear(ClearType::All))?
+            .queue(MoveTo(0, 0))?
+            .flush()?;
         self.initialize_prompt_position(None)
     }
 
     pub(crate) fn clear_scrollback(&mut self) -> Result<()> {
         self.stdout
-            .queue(crossterm::terminal::Clear(ClearType::All))?
-            .queue(crossterm::terminal::Clear(ClearType::Purge))?
-            .queue(cursor::MoveTo(0, 0))?
+            .queue(Clear(ClearType::All))?
+            .queue(Clear(ClearType::Purge))?
+            .queue(MoveTo(0, 0))?
             .flush()?;
         self.initialize_prompt_position(None)
     }

@@ -301,7 +301,13 @@ impl ColumnarMenu {
         use_ansi_coloring: bool,
     ) -> String {
         if use_ansi_coloring {
-            let match_len = self.working_details.shortest_base_string.len();
+            // strip quotes
+            let is_quote = |c: char| "`'\"".contains(c);
+            let shortest_base = &self.working_details.shortest_base_string;
+            let shortest_base = shortest_base
+                .strip_prefix(is_quote)
+                .unwrap_or(shortest_base);
+            let match_len = shortest_base.len();
 
             let suggestion_style = suggestion.style.unwrap_or(self.settings.color.text_style);
 
@@ -401,7 +407,7 @@ impl ColumnarMenu {
                         + self
                             .default_details
                             .col_padding
-                            .saturating_sub(marker.len()),
+                            .saturating_sub(marker.width()),
                 )
             } else {
                 format!(
@@ -410,7 +416,7 @@ impl ColumnarMenu {
                     &suggestion.value,
                     "",
                     self.end_of_line(column),
-                    empty = empty_space.saturating_sub(marker.len()),
+                    empty = empty_space.saturating_sub(marker.width()),
                 )
             };
 
@@ -493,7 +499,7 @@ impl Menu for ColumnarMenu {
         self.working_details.shortest_base_string = base_ranges
             .iter()
             .map(|range| editor.get_buffer()[range.clone()].to_string())
-            .min_by_key(|s| s.len())
+            .min_by_key(|s| s.width())
             .unwrap_or_default();
 
         self.reset_position();
@@ -508,64 +514,6 @@ impl Menu for ColumnarMenu {
         painter: &Painter,
     ) {
         if let Some(event) = self.event.take() {
-            // The working value for the menu are updated first before executing any of the
-            // menu events
-            //
-            // If there is at least one suggestion that contains a description, then the layout
-            // is changed to one column to fit the description
-            let exist_description = self
-                .get_values()
-                .iter()
-                .any(|suggestion| suggestion.description.is_some());
-
-            if exist_description {
-                self.working_details.columns = 1;
-                self.working_details.col_width = painter.screen_width() as usize;
-
-                self.longest_suggestion = self.get_values().iter().fold(0, |prev, suggestion| {
-                    if prev >= suggestion.value.len() {
-                        prev
-                    } else {
-                        suggestion.value.len()
-                    }
-                });
-            } else {
-                let max_width = self.get_values().iter().fold(0, |acc, suggestion| {
-                    let str_len = suggestion.value.len() + self.default_details.col_padding;
-                    if str_len > acc {
-                        str_len
-                    } else {
-                        acc
-                    }
-                });
-
-                // If no default width is found, then the total screen width is used to estimate
-                // the column width based on the default number of columns
-                let default_width = if let Some(col_width) = self.default_details.col_width {
-                    col_width
-                } else {
-                    let col_width = painter.screen_width() / self.default_details.columns;
-                    col_width as usize
-                };
-
-                // Adjusting the working width of the column based the max line width found
-                // in the menu values
-                if max_width > default_width {
-                    self.working_details.col_width = max_width;
-                } else {
-                    self.working_details.col_width = default_width;
-                };
-
-                // The working columns is adjusted based on possible number of columns
-                // that could be fitted in the screen with the calculated column width
-                let possible_cols = painter.screen_width() / self.working_details.col_width as u16;
-                if possible_cols > self.default_details.columns {
-                    self.working_details.columns = self.default_details.columns.max(1);
-                } else {
-                    self.working_details.columns = possible_cols;
-                }
-            }
-
             match event {
                 MenuEvent::Activate(updated) => {
                     self.active = true;
@@ -597,6 +545,64 @@ impl Menu for ColumnarMenu {
                 MenuEvent::MoveRight => self.move_right(),
                 MenuEvent::PreviousPage | MenuEvent::NextPage => {
                     // The columnar menu doest have the concept of pages, yet
+                }
+            }
+
+            // The working value for the menu are updated only after executing the menu events,
+            // so they have the latest suggestions
+            //
+            // If there is at least one suggestion that contains a description, then the layout
+            // is changed to one column to fit the description
+            let exist_description = self
+                .get_values()
+                .iter()
+                .any(|suggestion| suggestion.description.is_some());
+
+            if exist_description {
+                self.working_details.columns = 1;
+                self.working_details.col_width = painter.screen_width() as usize;
+
+                self.longest_suggestion = self.get_values().iter().fold(0, |prev, suggestion| {
+                    if prev >= suggestion.value.width() {
+                        prev
+                    } else {
+                        suggestion.value.width()
+                    }
+                });
+            } else {
+                let max_width = self.get_values().iter().fold(0, |acc, suggestion| {
+                    let str_len = suggestion.value.width() + self.default_details.col_padding;
+                    if str_len > acc {
+                        str_len
+                    } else {
+                        acc
+                    }
+                });
+
+                // If no default width is found, then the total screen width is used to estimate
+                // the column width based on the default number of columns
+                let default_width = if let Some(col_width) = self.default_details.col_width {
+                    col_width
+                } else {
+                    let col_width = painter.screen_width() / self.default_details.columns;
+                    col_width as usize
+                };
+
+                // Adjusting the working width of the column based the max line width found
+                // in the menu values
+                if max_width > default_width {
+                    self.working_details.col_width = max_width;
+                } else {
+                    self.working_details.col_width = default_width;
+                };
+
+                // The working columns is adjusted based on possible number of columns
+                // that could be fitted in the screen with the calculated column width
+                let possible_cols = painter.screen_width() / self.working_details.col_width as u16;
+                if possible_cols > self.default_details.columns {
+                    self.working_details.columns = self.default_details.columns.max(1);
+                } else {
+                    self.working_details.columns = possible_cols;
                 }
             }
         }
@@ -647,7 +653,7 @@ impl Menu for ColumnarMenu {
                     // Correcting the enumerate index based on the number of skipped values
                     let index = index + skip_values;
                     let column = index as u16 % self.get_cols();
-                    let empty_space = self.get_width().saturating_sub(suggestion.value.len());
+                    let empty_space = self.get_width().saturating_sub(suggestion.value.width());
 
                     self.create_string(suggestion, index, column, empty_space, use_ansi_coloring)
                 })
@@ -766,5 +772,17 @@ mod tests {
             editor.is_cursor_at_buffer_end(),
             "cursor should be at the end after completion"
         );
+    }
+
+    #[test]
+    fn test_menu_create_string() {
+        // https://github.com/nushell/nushell/issues/13951
+        let mut completer = FakeCompleter::new(&["おはよう", "`おはよう(`"]);
+        let mut menu = ColumnarMenu::default().with_name("testmenu");
+        let mut editor = Editor::default();
+
+        editor.set_buffer("おは".to_string(), UndoBehavior::CreateUndoPoint);
+        menu.update_values(&mut editor, &mut completer);
+        assert!(menu.menu_string(2, true).contains("`おは"));
     }
 }
