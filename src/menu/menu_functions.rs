@@ -394,7 +394,7 @@ pub fn style_suggestion(suggestion: &str, match_indices: &[usize], match_style: 
                 res.push_str(&match_style.prefix().to_string());
             } else if !is_match && prev_matched && i != 0 {
                 res.push_str(RESET);
-                res.push_str(&suggestion[escape_start..text_start]);
+                res.push_str(escape);
             }
             res.push_str(grapheme);
             prev_matched = is_match;
