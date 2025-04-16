@@ -777,7 +777,7 @@ mod tests {
             style2.prefix(),
             "e",
             RESET,
-            "ba",
+            "b@",
             match_style.paint("r"),
         );
         let match_indices = &[
@@ -788,7 +788,7 @@ mod tests {
         assert_eq!(
             expected,
             style_suggestion(
-                &format!("{}{}{}", style1.paint("ab汉d"), style2.paint("y̆👩🏾e"), "bar"),
+                &format!("{}{}{}", style1.paint("ab汉d"), style2.paint("y̆👩🏾e"), "b@r"),
                 match_indices,
                 &match_style
             )
