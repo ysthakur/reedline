@@ -4,12 +4,14 @@
 // One of the suggestions is "multiple 汉 by̆tes字👩🏾". Try typing in "y" or "👩" and note how
 // the entire grapheme "y̆" or "👩🏾" is highlighted (might not look right in your terminal).
 
+use nu_ansi_term::{Color, Style};
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, Completer, DefaultPrompt, EditCommand, Emacs, KeyCode,
     KeyModifiers, Keybindings, MenuBuilder, Reedline, ReedlineEvent, ReedlineMenu, Signal, Span,
     Suggestion,
 };
 use std::io;
+use unicode_segmentation::UnicodeSegmentation;
 
 struct HomegrownFuzzyCompleter(Vec<String>);
 
@@ -19,35 +21,30 @@ impl Completer for HomegrownFuzzyCompleter {
         self.0
             .iter()
             .filter_map(|command_str| {
-                let command = command_str.as_bytes();
-                let mut start = 0;
+                let command = command_str.graphemes(true).collect::<Vec<_>>();
+                let mut ind = 0;
                 let mut match_indices = Vec::new();
-                for l in line.as_bytes() {
-                    if start == command.len() {
-                        break;
+                for g in line[..pos].graphemes(true) {
+                    while ind < command.len() && command[ind] != g {
+                        ind += 1;
                     }
-                    let mut i = start;
-                    while i < command.len() && *l != command[i] {
-                        i += 1;
+                    if ind == command.len() {
+                        return None;
                     }
-                    if i < command.len() {
-                        match_indices.push(i);
-                        start = i + 1;
-                    }
+                    match_indices.push(ind);
+                    ind += 1;
                 }
-                if match_indices.is_empty() || match_indices.len() * 2 < pos {
-                    None
-                } else {
-                    Some(Suggestion {
-                        value: command_str.to_string(),
-                        description: None,
-                        style: None,
-                        extra: None,
-                        span: Span::new(pos - line.len(), pos),
-                        append_whitespace: false,
-                        match_indices: Some(match_indices),
-                    })
-                }
+
+                Some(Suggestion {
+                    value: command_str.to_string(),
+                    description: None,
+                    style: None,
+                    extra: None,
+                    span: Span::new(0, pos),
+                    append_whitespace: false,
+                    match_indices: Some(match_indices),
+                    ..Default::default()
+                })
             })
             .collect()
     }
@@ -99,6 +96,7 @@ fn main() -> io::Result<()> {
         "abacaxyc".into(),
         "abadarabc".into(),
         "multiple 汉 by̆tes字👩🏾".into(),
+        "ab汉 by̆tes👩🏾".into(),
     ];
 
     let completer = Box::new(HomegrownFuzzyCompleter(commands));
@@ -108,7 +106,9 @@ fn main() -> io::Result<()> {
         .with_name("completion_menu")
         .with_columns(columns)
         .with_column_width(col_width)
-        .with_column_padding(col_padding);
+        .with_column_padding(col_padding)
+        .with_text_style(Style::new().italic().on(Color::LightGreen))
+        .with_match_text_style(Style::new().on(Color::LightBlue));
 
     let completion_menu = Box::new(columnar_menu);
 

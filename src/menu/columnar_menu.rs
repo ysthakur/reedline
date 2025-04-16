@@ -325,10 +325,14 @@ impl ColumnarMenu {
                     format!(
                         "{:left_text_size$}{}{}{}{}{}",
                         style_suggestion(
-                            &suggestion.value,
+                            &self
+                                .settings
+                                .color
+                                .selected_text_style
+                                .paint(&suggestion.value)
+                                .to_string(),
                             match_indices,
                             &self.settings.color.selected_match_style,
-                            &self.settings.color.selected_text_style
                         ),
                         self.settings.color.description_style.prefix(),
                         self.settings.color.selected_text_style.prefix(),
@@ -344,10 +348,14 @@ impl ColumnarMenu {
                     format!(
                         "{}{:>empty$}{}",
                         style_suggestion(
-                            &suggestion.value,
+                            &self
+                                .settings
+                                .color
+                                .selected_text_style
+                                .paint(&suggestion.value)
+                                .to_string(),
                             match_indices,
                             &self.settings.color.selected_match_style,
-                            &self.settings.color.selected_text_style
                         ),
                         "",
                         self.end_of_line(column),
@@ -358,10 +366,9 @@ impl ColumnarMenu {
                 format!(
                     "{:left_text_size$}{}{}{}{}",
                     style_suggestion(
-                        &suggestion.value,
+                        &suggestion_style.paint(&suggestion.value).to_string(),
                         match_indices,
                         &self.settings.color.match_style,
-                        &suggestion_style
                     ),
                     self.settings.color.description_style.prefix(),
                     description
@@ -376,10 +383,9 @@ impl ColumnarMenu {
                 format!(
                     "{}{}{:>empty$}{}{}",
                     style_suggestion(
-                        &suggestion.value,
+                        &suggestion_style.paint(&suggestion.value).to_string(),
                         match_indices,
                         &self.settings.color.match_style,
-                        &suggestion_style
                     ),
                     self.settings.color.description_style.prefix(),
                     "",
@@ -749,7 +755,7 @@ mod tests {
             extra: None,
             span: Span { start: 0, end: pos },
             append_whitespace: false,
-            match_indices: None,
+            ..Default::default()
         }
     }
 

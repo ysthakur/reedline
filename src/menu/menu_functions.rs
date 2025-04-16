@@ -1,5 +1,5 @@
 //! Collection of common functions that can be used to create menus
-use nu_ansi_term::{AnsiStrings, Style};
+use nu_ansi_term::{ansi::RESET, Style};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{Editor, Suggestion, UndoBehavior};
@@ -360,43 +360,61 @@ pub fn can_partially_complete(values: &[Suggestion], editor: &mut Editor) -> boo
 /// Style a suggestion to be shown in a completer menu
 ///
 /// * `match_indices` - Indices of bytes that matched the typed text
-pub fn style_suggestion(
-    suggestion: &str,
-    match_indices: &[usize],
-    match_style: &Style,
-    text_style: &Style,
-) -> String {
-    let mut parts = Vec::new();
-    let mut prev_styled = false;
-    let mut part_start = 0;
-    for (grapheme_start, grapheme) in suggestion.grapheme_indices(true) {
-        let is_match =
-            (grapheme_start..(grapheme_start + grapheme.len())).any(|i| match_indices.contains(&i));
-        if is_match && !prev_styled {
-            if part_start < grapheme_start {
-                parts.push(text_style.paint(&suggestion[part_start..grapheme_start]));
-            }
-            part_start = grapheme_start;
-            prev_styled = true;
-        } else if !is_match && prev_styled {
-            if part_start < grapheme_start {
-                parts.push(match_style.paint(&suggestion[part_start..grapheme_start]));
-            }
-            part_start = grapheme_start;
-            prev_styled = false;
-        }
+pub fn style_suggestion(suggestion: &str, match_indices: &[usize], match_style: &Style) -> String {
+    let escapes = parse_ansi::parse_bytes(suggestion.as_bytes()).collect::<Vec<_>>();
+    let mut segments = Vec::new();
+    if escapes.is_empty() {
+        segments.push((0, 0, suggestion.len()));
+    } else if escapes[0].start() > 0 {
+        segments.push((0, 0, escapes[0].start()));
+    }
+    for (i, m) in escapes.iter().enumerate() {
+        let next = if i + 1 == escapes.len() {
+            suggestion.len()
+        } else {
+            escapes[i + 1].start()
+        };
+        segments.push((m.start(), m.end(), next));
     }
 
-    let last_style = if prev_styled { match_style } else { text_style };
-    parts.push(last_style.paint(&suggestion[part_start..]));
+    let mut res = String::new();
 
-    AnsiStrings(&parts).to_string()
+    let mut offset = 0;
+    for (escape_start, text_start, text_end) in segments {
+        let escape = &suggestion[escape_start..text_start];
+        let text = &suggestion[text_start..text_end];
+        let graphemes = text.graphemes(true).collect::<Vec<_>>();
+        let mut prev_matched = false;
+
+        res.push_str(escape);
+        for (i, grapheme) in graphemes.iter().enumerate() {
+            let is_match = match_indices.contains(&(i + offset));
+
+            if is_match && !prev_matched {
+                res.push_str(&match_style.prefix().to_string());
+            } else if !is_match && prev_matched && i != 0 {
+                res.push_str(RESET);
+                res.push_str(&suggestion[escape_start..text_start]);
+            }
+            res.push_str(grapheme);
+            prev_matched = is_match;
+        }
+
+        if prev_matched {
+            res.push_str(RESET);
+        }
+
+        offset += graphemes.len();
+    }
+
+    res
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{EditCommand, LineBuffer, Span};
+    use nu_ansi_term::Color;
     use rstest::rstest;
 
     #[test]
@@ -651,7 +669,7 @@ mod tests {
                 extra: None,
                 span: Span::new(0, s.len()),
                 append_whitespace: false,
-                match_indices: None,
+                ..Default::default()
             })
             .collect();
         let res = find_common_string(&input);
@@ -672,7 +690,7 @@ mod tests {
                 extra: None,
                 span: Span::new(0, s.len()),
                 append_whitespace: false,
-                match_indices: None,
+                ..Default::default()
             })
             .collect();
         let res = find_common_string(&input);
@@ -728,7 +746,7 @@ mod tests {
                 extra: None,
                 span: Span::new(start, end),
                 append_whitespace: false,
-                match_indices: None,
+                ..Default::default()
             }),
             &mut editor,
         );
@@ -742,26 +760,38 @@ mod tests {
 
     #[test]
     fn style_fuzzy_suggestion() {
-        let match_style = Style::new().italic();
-        let text_style = Style::new().dimmed();
+        let match_style = Style::new().underline();
+        let style1 = Style::new().on(Color::Blue);
+        let style2 = Style::new().on(Color::Green);
 
-        let expected = AnsiStrings(&[
-            match_style.paint("ab"),
-            text_style.paint("c"),
+        let expected = format!(
+            "{}{}{}{}{}{}{}{}{}{}{}{}{}",
+            style1.prefix(),
+            "ab",
             match_style.paint("汉"),
-            text_style.paint("d"),
-            match_style.paint("y̆"),
-            text_style.paint("e"),
-        ])
-        .to_string();
+            style1.prefix(),
+            "d",
+            RESET,
+            style2.prefix(),
+            match_style.paint("y̆👩🏾"),
+            style2.prefix(),
+            "e",
+            RESET,
+            "ba",
+            match_style.paint("r"),
+        );
         let match_indices = &[
-            0, 1, // ab
-            5, // the last (third) byte of 汉
-            7, // the first byte of y̆
+            2, // 汉
+            4, 5, // y̆👩🏾
+            9, // r
         ];
         assert_eq!(
             expected,
-            style_suggestion("abc汉dy̆e", match_indices, &match_style, &text_style)
+            style_suggestion(
+                &format!("{}{}{}", style1.paint("ab汉d"), style2.paint("y̆👩🏾e"), "bar"),
+                match_indices,
+                &match_style
+            )
         );
     }
 }

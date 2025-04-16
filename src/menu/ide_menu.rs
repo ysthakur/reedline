@@ -537,10 +537,14 @@ impl IdeMenu {
                     suggestion_style.prefix(),
                     " ".repeat(padding),
                     style_suggestion(
-                        &suggestion.value,
+                        &self
+                            .settings
+                            .color
+                            .selected_text_style
+                            .paint(&suggestion.value)
+                            .to_string(),
                         match_indices,
                         &self.settings.color.selected_match_style,
-                        &self.settings.color.selected_text_style
                     ),
                     " ".repeat(padding_right),
                     RESET,
@@ -553,10 +557,9 @@ impl IdeMenu {
                     suggestion_style.prefix(),
                     " ".repeat(padding),
                     style_suggestion(
-                        &suggestion.value,
+                        &suggestion_style.paint(&suggestion.value).to_string(),
                         match_indices,
                         &self.settings.color.match_style,
-                        &suggestion_style
                     ),
                     " ".repeat(padding_right),
                     RESET,
@@ -1387,7 +1390,7 @@ mod tests {
             extra: None,
             span: Span { start: 0, end: pos },
             append_whitespace: false,
-            match_indices: None,
+            ..Default::default()
         }
     }
 
