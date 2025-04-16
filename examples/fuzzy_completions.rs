@@ -43,7 +43,6 @@ impl Completer for HomegrownFuzzyCompleter {
                     span: Span::new(0, pos),
                     append_whitespace: false,
                     match_indices: Some(match_indices),
-                    ..Default::default()
                 })
             })
             .collect()
