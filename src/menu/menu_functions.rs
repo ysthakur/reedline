@@ -1,8 +1,16 @@
 //! Collection of common functions that can be used to create menus
 use nu_ansi_term::{ansi::RESET, Style};
+use regex::Regex;
+use std::sync::LazyLock;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{Editor, Suggestion, UndoBehavior};
+
+/// Matches ANSI escapes. Stolen from https://github.com/dbkaplun/parse-ansi, which got it from
+/// https://github.com/nodejs/node/blob/641d4a4159aaa96eece8356e03ec6c7248ae3e73/lib/internal/readline.js#L9
+static ANSI_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"[\x1b\x9b]\[[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]").unwrap()
+});
 
 /// Index result obtained from parsing a string with an index marker
 /// For example, the next string:
@@ -359,9 +367,10 @@ pub fn can_partially_complete(values: &[Suggestion], editor: &mut Editor) -> boo
 
 /// Style a suggestion to be shown in a completer menu
 ///
-/// * `match_indices` - Indices of bytes that matched the typed text
+/// * `match_indices` - Indices of graphemes (NOT bytes or chars) that matched the typed text
+/// * `match_style` - Style to use for matched characters
 pub fn style_suggestion(suggestion: &str, match_indices: &[usize], match_style: &Style) -> String {
-    let escapes = parse_ansi::parse_bytes(suggestion.as_bytes()).collect::<Vec<_>>();
+    let escapes = ANSI_REGEX.find_iter(suggestion).collect::<Vec<_>>();
     let mut segments = Vec::new();
     if escapes.is_empty() {
         segments.push((0, 0, suggestion.len()));
@@ -756,6 +765,17 @@ mod tests {
         editor.run_edit_command(&EditCommand::Undo);
         assert_eq!(orig_buffer, editor.get_buffer());
         assert_eq!(orig_insertion_point, editor.insertion_point());
+    }
+
+    #[test]
+    fn parse_ansi() {
+        assert_eq!(
+            ANSI_REGEX
+                .find_iter("before \x1b[31;4mred underline\x1b[0m after")
+                .map(|m| (m.start(), m.end(), m.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(7, 14, "\x1b[31;4m"), (27, 31, "\x1b[0m")]
+        );
     }
 
     #[test]
