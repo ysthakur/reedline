@@ -381,7 +381,8 @@ impl ColumnarMenu {
         use_ansi_coloring: bool,
     ) -> String {
         let selected = index == self.index();
-        let empty_space = self.get_width().saturating_sub(suggestion.value.width());
+        let display_value = suggestion.display_value();
+        let empty_space = self.get_width().saturating_sub(display_value.width());
 
         if use_ansi_coloring {
             // TODO(ysthakur): let the user strip quotes, rather than doing it here
@@ -392,11 +393,11 @@ impl ColumnarMenu {
                 .unwrap_or(shortest_base);
 
             let match_indices =
-                get_match_indices(&suggestion.value, &suggestion.match_indices, shortest_base);
+                get_match_indices(display_value, &suggestion.match_indices, shortest_base);
 
             let left_text_size = self.longest_suggestion + self.default_details.col_padding;
             let description_size = self.get_width().saturating_sub(left_text_size);
-            let padding = left_text_size.saturating_sub(suggestion.value.len());
+            let padding = left_text_size.saturating_sub(display_value.len());
 
             let value_style = if selected {
                 &self.settings.color.selected_text_style
@@ -404,7 +405,7 @@ impl ColumnarMenu {
                 &suggestion.style.unwrap_or(self.settings.color.text_style)
             };
             let styled_value = style_suggestion(
-                &value_style.paint(&suggestion.value).to_string(),
+                &value_style.paint(display_value).to_string(),
                 match_indices.as_ref(),
                 &self.settings.color.match_style,
             );
@@ -450,7 +451,7 @@ impl ColumnarMenu {
                 format!(
                     "{}{:max$}{}",
                     marker,
-                    &suggestion.value,
+                    display_value,
                     description
                         .chars()
                         .take(empty_space)
@@ -466,7 +467,7 @@ impl ColumnarMenu {
                 format!(
                     "{}{}{:>empty$}",
                     marker,
-                    &suggestion.value,
+                    display_value,
                     "",
                     empty = empty_space.saturating_sub(marker.width()),
                 )
@@ -618,22 +619,21 @@ impl Menu for ColumnarMenu {
                 self.working_details.columns = 1;
                 self.working_details.col_width = painter.screen_width() as usize;
 
-                self.longest_suggestion = self.get_values().iter().fold(0, |prev, suggestion| {
-                    if prev >= suggestion.value.width() {
-                        prev
-                    } else {
-                        suggestion.value.width()
-                    }
-                });
+                self.longest_suggestion = self
+                    .get_values()
+                    .iter()
+                    .map(|suggestion| suggestion.display_value().width())
+                    .max()
+                    .unwrap_or(0);
             } else {
-                let max_width = self.get_values().iter().fold(0, |acc, suggestion| {
-                    let str_len = suggestion.value.width() + self.default_details.col_padding;
-                    if str_len > acc {
-                        str_len
-                    } else {
-                        acc
-                    }
-                });
+                let max_width = self
+                    .get_values()
+                    .iter()
+                    .map(|suggestion| {
+                        suggestion.display_value().width() + self.default_details.col_padding
+                    })
+                    .max()
+                    .unwrap_or(0);
 
                 // If no default width is found, then the total screen width is used to estimate
                 // the column width based on the default number of columns

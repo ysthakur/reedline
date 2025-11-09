@@ -500,22 +500,23 @@ impl IdeMenu {
             .map(|border| border.vertical)
             .unwrap_or_default();
 
+        let display_value = suggestion.display_value();
+
         let padding_right = (self.working_details.completion_width as usize)
-            .saturating_sub(suggestion.value.chars().count() + border_width + padding);
+            .saturating_sub(display_value.chars().count() + border_width + padding);
 
         let max_string_width =
             (self.working_details.completion_width as usize).saturating_sub(border_width + padding);
 
-        let string = if suggestion.value.chars().count() > max_string_width {
-            let mut chars = suggestion
-                .value
+        let string = if display_value.chars().count() > max_string_width {
+            let mut chars = display_value
                 .chars()
                 .take(max_string_width.saturating_sub(3))
                 .collect::<String>();
             chars.push_str("...");
             chars
         } else {
-            suggestion.value.clone()
+            display_value.to_string()
         };
 
         if use_ansi_coloring {
@@ -527,7 +528,7 @@ impl IdeMenu {
                 .unwrap_or(shortest_base);
 
             let match_indices =
-                get_match_indices(&suggestion.value, &suggestion.match_indices, shortest_base);
+                get_match_indices(&display_value, &suggestion.match_indices, shortest_base);
 
             let suggestion_style = suggestion.style.unwrap_or(self.settings.color.text_style);
 
@@ -700,13 +701,12 @@ impl Menu for IdeMenu {
                 | MenuEvent::NextPage => {}
             }
 
-            self.longest_suggestion = self.get_values().iter().fold(0, |prev, suggestion| {
-                if prev >= suggestion.value.len() {
-                    prev
-                } else {
-                    suggestion.value.len()
-                }
-            });
+            self.longest_suggestion = self
+                .get_values()
+                .iter()
+                .map(|suggestion| suggestion.display_value().width())
+                .max()
+                .unwrap_or(0);
 
             let terminal_width = painter.screen_width();
             let mut cursor_pos = self.working_details.cursor_col;
