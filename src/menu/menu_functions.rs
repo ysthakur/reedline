@@ -376,12 +376,18 @@ pub fn can_partially_complete(values: &[Suggestion], editor: &mut Editor) -> boo
     }
 }
 
+#[derive(Debug, PartialEq)]
+struct AnsiSegment<'a> {
+    escape: &'a str,
+    text: &'a str,
+}
+
 /// Parse ANSI sequences for setting display attributes in the given string.
 /// Each returned item is a tuple (escape start, escape end, text end), for
 /// finding each sequence and the text affected by it.
 ///
 /// Essentially just looks for 'ESC [' followed by /[0-9;]*m/, ignoring other ANSI sequences.
-fn parse_ansi(s: &str) -> Vec<(usize, usize, usize)> {
+fn parse_ansi(s: &str) -> Vec<AnsiSegment> {
     let mut segments = Vec::new();
 
     let mut last_escape_start = 0;
@@ -402,16 +408,59 @@ fn parse_ansi(s: &str) -> Vec<(usize, usize, usize)> {
         }
 
         if escape_start != 0 {
-            segments.push((last_escape_start, last_escape_end, escape_start));
+            segments.push(AnsiSegment {
+                escape: &s[last_escape_start..last_escape_end],
+                text: &s[last_escape_end..escape_start],
+            });
         }
         last_escape_start = escape_start;
         last_escape_end = s.len() - after_params.len() + 1;
         offset = last_escape_end;
     }
 
-    segments.push((last_escape_start, last_escape_end, s.len()));
+    segments.push(AnsiSegment {
+        escape: &s[last_escape_start..last_escape_end],
+        text: &s[last_escape_end..s.len()],
+    });
     segments
 }
+
+// /// Truncate a string that may have ANSI escapes to the given width.
+// ///
+// /// If `s` is longer than `max_width`, the resulting string will end in "..."
+// /// and have width at most `max_width`.
+// pub(crate) fn truncate_with_ansi(s: &str, max_width: usize) -> Cow<str> {
+//     let trunc_suffix = "...";
+//     let suffix_width = trunc_suffix.width();
+
+//     let segments = parse_ansi(s);
+//     let mut curr_width = 0;
+//     let mut max_ind_trunc = 0;
+//     let mut max_ind_full = 0;
+//     for (i, segment) in segments.iter().enumerate() {
+//         curr_width += segment.text.width();
+//         if curr_width + suffix_width > max_width {
+//             break;
+//         }
+//     }
+//     if s.width() <= max_width {
+//         Cow::Borrowed(s)
+//     } else {
+
+
+//         let mut res = String::new();
+//         let mut curr_width = 0;
+//         for grapheme in s.graphemes(true) {
+//             curr_width += grapheme.width();
+//             if curr_width + suffix_width > max_width {
+//                 break;
+//             }
+//             res.push_str(grapheme);
+//         }
+//         res.push_str(trunc_suffix);
+//         Cow::Owned(res)
+//     }
+// }
 
 /// Style a suggestion to be shown in a completer menu
 ///
@@ -420,9 +469,7 @@ fn parse_ansi(s: &str) -> Vec<(usize, usize, usize)> {
 pub fn style_suggestion(suggestion: &str, match_indices: &[usize], match_style: &Style) -> String {
     let mut res = String::new();
     let mut offset = 0;
-    for (escape_start, text_start, text_end) in parse_ansi(suggestion) {
-        let escape = &suggestion[escape_start..text_start];
-        let text = &suggestion[text_start..text_end];
+    for AnsiSegment { escape, text } in parse_ansi(suggestion) {
         let graphemes = text.graphemes(true).collect::<Vec<_>>();
         let mut prev_matched = false;
 
@@ -816,11 +863,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case("plain", vec![(0, 0, 5)])]
-    #[case("\x1b[mempty", vec![(0, 3, 8)])]
-    #[case("\x1b[\x1b[minvalid", vec![(0, 0, 2), (2, 5, 12)])]
-    #[case("a\x1b[1;mb\x1b[;mc", vec![(0, 0, 1), (1, 6, 7), (7, 11, 12)])]
-    fn test_parse_ansi(#[case] s: &str, #[case] expected: Vec<(usize, usize, usize)>) {
+    #[case("plain", vec![AnsiSegment { escape: "", text: "plain" }])]
+    #[case("\x1b[mempty", vec![AnsiSegment { escape: "\x1b[m", text: "empty" }])]
+    #[case(
+        "\x1b[\x1b[minvalid",
+        vec![
+            AnsiSegment { escape: "", text: "\x1b[" },
+            AnsiSegment { escape: "\x1b[m", text: "invalid" }
+        ]
+    )]
+    #[case(
+        "a\x1b[1;mb\x1b[;mc",
+        vec![
+            AnsiSegment { escape: "", text: "a" },
+            AnsiSegment { escape: "\x1b[1;m", text: "b" },
+            AnsiSegment { escape: "\x1b[;m", text: "c" },
+        ]
+    )]
+    fn test_parse_ansi(#[case] s: &str, #[case] expected: Vec<AnsiSegment>) {
         assert_eq!(parse_ansi(s), expected);
     }
 

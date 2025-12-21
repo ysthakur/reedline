@@ -105,7 +105,7 @@ impl Completer for DefaultCompleter {
 
                                     Suggestion {
                                         value: format!("{span_line}{ext}"),
-                                        description: None,
+                                        // description: Some("asdjfaslkfdasldfjasldkfjas;ldfkjasl;kdfjas;lkdfjasdlfk".to_string()),
                                         style: None,
                                         extra: None,
                                         span,

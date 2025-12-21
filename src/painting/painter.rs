@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mockall::automock;
+
 use crate::{CursorConfig, PromptEditMode, PromptViMode};
 
 use {
@@ -100,6 +103,7 @@ pub struct Painter {
     after_cursor_lines: Option<String>,
 }
 
+#[cfg_attr(test, automock)]
 impl Painter {
     pub(crate) fn new(stdout: W) -> Self {
         Painter {
@@ -156,9 +160,9 @@ impl Painter {
     ///
     /// Not to be used for resizes during a running line editor, use
     /// [`Painter::handle_resize()`] instead
-    pub(crate) fn initialize_prompt_position(
+    pub(crate) fn initialize_prompt_position<'a>(
         &mut self,
-        suspended_state: Option<&PainterSuspendedState>,
+        suspended_state: Option<&'a PainterSuspendedState>,
     ) -> Result<()> {
         // Update the terminal size
         self.terminal_size = {
@@ -199,12 +203,12 @@ impl Painter {
     ///
     /// Note. The `ScrollUp` operation in `crossterm` deletes lines from the top of
     /// the screen.
-    pub(crate) fn repaint_buffer(
+    pub(crate) fn repaint_buffer<'a>(
         &mut self,
         prompt: &dyn Prompt,
-        lines: &PromptLines,
+        lines: &PromptLines<'a>,
         prompt_mode: PromptEditMode,
-        menu: Option<&ReedlineMenu>,
+        menu: Option<&'a ReedlineMenu>,
         use_ansi_coloring: bool,
         cursor_config: &Option<CursorConfig>,
     ) -> Result<()> {
@@ -292,7 +296,7 @@ impl Painter {
         self.stdout.flush()
     }
 
-    fn print_right_prompt(&mut self, lines: &PromptLines) -> Result<()> {
+    fn print_right_prompt<'a>(&mut self, lines: &PromptLines<'a>) -> Result<()> {
         let prompt_length_right = line_width(&lines.prompt_str_right);
         let start_position = self
             .screen_width()
@@ -316,10 +320,10 @@ impl Painter {
         Ok(())
     }
 
-    fn print_menu(
+    fn print_menu<'a>(
         &mut self,
         menu: &dyn Menu,
-        lines: &PromptLines,
+        lines: &PromptLines<'a>,
         use_ansi_coloring: bool,
     ) -> Result<()> {
         let screen_width = self.screen_width();
@@ -344,11 +348,11 @@ impl Painter {
         Ok(())
     }
 
-    fn print_small_buffer(
+    fn print_small_buffer<'a>(
         &mut self,
         prompt: &dyn Prompt,
-        lines: &PromptLines,
-        menu: Option<&ReedlineMenu>,
+        lines: &PromptLines<'a>,
+        menu: Option<&'a ReedlineMenu>,
         use_ansi_coloring: bool,
     ) -> Result<()> {
         // print our prompt with color
@@ -395,11 +399,11 @@ impl Painter {
         Ok(())
     }
 
-    fn print_large_buffer(
+    fn print_large_buffer<'a>(
         &mut self,
         prompt: &dyn Prompt,
-        lines: &PromptLines,
-        menu: Option<&ReedlineMenu>,
+        lines: &PromptLines<'a>,
+        menu: Option<&'a ReedlineMenu>,
         use_ansi_coloring: bool,
     ) -> Result<()> {
         let screen_width = self.screen_width();
